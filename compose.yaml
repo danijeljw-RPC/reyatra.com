@@ -1,0 +1,71 @@
+services:
+  caddy:
+    container_name: caddy
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - "caddy_data:/data/caddy"
+      - "caddy_config:/config"
+      - "./logs/caddy2:/var/log/caddy"
+      - "./conf/caddy2/Caddyfile.wp:/etc/caddy/Caddyfile"
+      - "wordpress_data:/var/www/html"
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "https://reyatra.com/index.php", "-O", "/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  wordpress:
+    container_name: wordpress
+    image: wordpress:php8.3-fpm-alpine
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    env_file:
+      "./env/wordpress.env"
+    volumes:
+      - "wordpress_data:/var/www/html"
+      - "./conf/wordpress/custom.ini:/usr/local/etc/php/conf.d/uploads.ini"
+    networks:
+      - backend
+
+  mariadb:
+    container_name: mariadb
+    image: mariadb:lts-ubi9
+    volumes:
+      - "mariadb_data:/var/lib/mysql"
+      - "./conf/mariadb/healthcheck.sh:/usr/local/bin/healthcheck.sh"
+    networks:
+      - backend
+    restart: unless-stopped
+    env_file:
+      - "./env/mariadb.env"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mariadb_data:
+  wordpress_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  frontend:
+    name: frontend
+    driver: bridge
+  backend:
+    name: backend
+    driver: bridge
+    internal: true
